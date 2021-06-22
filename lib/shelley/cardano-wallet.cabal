@@ -200,6 +200,10 @@ test-suite unit
     ghc-options: -O2 -Werror
   build-depends:
       base
+    , aeson
+    , extra
+    , cborg
+    , unordered-containers
     , base58-bytestring
     , bech32
     , bech32-th
@@ -234,9 +238,11 @@ test-suite unit
      exitcode-stdio-1.0
   hs-source-dirs:
       test/unit
+      ../core/test/unit
   main-is:
       Main.hs
   other-modules:
+      Cardano.Wallet.Gen
       Cardano.Wallet.Shelley.CompatibilitySpec
       Cardano.Wallet.Shelley.Compatibility.LedgerSpec
       Cardano.Wallet.Shelley.LaunchSpec
