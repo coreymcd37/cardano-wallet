@@ -27,6 +27,7 @@ import Cardano.Wallet.Api.Types
     , ApiConstructTransaction
     , ApiFee (..)
     , ApiStakePool
+    , ApiSignedTransaction
     , ApiT (..)
     , ApiWallet
     , DecodeAddress
@@ -75,6 +76,7 @@ import Test.Integration.Framework.DSL
     , expectSuccess
     , fixtureMultiAssetWallet
     , fixtureWallet
+    , fixturePassphrase
     , fixtureWalletWith
     , getFromResponse
     , json
@@ -754,6 +756,8 @@ spec = describe "NEW_SHELLEY_TRANSACTIONS" $ do
   -- minting
   -- update with sign / submit tx where applicable
   -- end to end join pool and get rewards
+=======
+>>>>>>> 4f9efbadb (accommodate sign tx in integrations testing)
   where
     -- Construct a JSON payment request for the given quantity of lovelace.
     mkTxPayload
