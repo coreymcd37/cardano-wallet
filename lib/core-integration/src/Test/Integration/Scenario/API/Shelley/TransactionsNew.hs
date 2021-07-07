@@ -26,8 +26,8 @@ import Cardano.Wallet.Api.Types
     , ApiCoinSelectionOutput (..)
     , ApiConstructTransaction
     , ApiFee (..)
-    , ApiStakePool
     , ApiSignedTransaction
+    , ApiStakePool
     , ApiT (..)
     , ApiWallet
     , DecodeAddress
@@ -75,8 +75,8 @@ import Test.Integration.Framework.DSL
     , expectResponseCode
     , expectSuccess
     , fixtureMultiAssetWallet
-    , fixtureWallet
     , fixturePassphrase
+    , fixtureWallet
     , fixtureWalletWith
     , getFromResponse
     , json
@@ -212,14 +212,10 @@ spec = describe "NEW_SHELLEY_TRANSACTIONS" $ do
         wb <- emptyWallet ctx
         let amt = (minUTxOValue :: Natural)
 
-        payload <- liftIO $ mkTxPayload ctx wb amt
         (destAddr, constrPayload) <- liftIO $ mkTxPayload ctx wb amt
 
         (_, ApiFee (Quantity feeMin) _ _ _) <- unsafeRequest ctx
-            (Link.getTransactionFee @'Shelley wa) payload
-        rTx <- request @(ApiConstructTransaction n) ctx
-            (Link.createUnsignedTransaction @'Shelley wa) Default payload
-        verify rTx
+
             (Link.getTransactionFee @'Shelley wa) constrPayload
         rConstrTx <- request @(ApiConstructTransaction n) ctx
             (Link.createUnsignedTransaction @'Shelley wa) Default constrPayload
@@ -231,11 +227,9 @@ spec = describe "NEW_SHELLEY_TRANSACTIONS" $ do
         let filterInitialAmt =
                 filter (\(ApiCoinSelectionInput _ _ _ _ amt' _) -> amt' == Quantity initialAmt)
         let coinSelInputs = filterInitialAmt $ NE.toList $
-                getFromResponse (#coinSelection . #inputs) rTx
                 getFromResponse (#coinSelection . #inputs) rConstrTx
         length coinSelInputs `shouldBe` 1
 
-        -- now we should sign it and send it in two steps
         let coinSelOutputs = getFromResponse (#coinSelection . #outputs) rConstrTx
         coinSelOutputs `shouldBe`
             [ApiCoinSelectionOutput destAddr (Quantity amt) (ApiT W.empty)]
@@ -254,12 +248,13 @@ spec = describe "NEW_SHELLEY_TRANSACTIONS" $ do
             ]
 
         -- and send it in two steps
+
     it "TRANS_NEW_CREATE_04b - Cannot spend less than minUTxOValue" $ \ctx -> runResourceT $ do
         wa <- fixtureWallet ctx
         wb <- emptyWallet ctx
         let amt = minUTxOValue - 1
 
-        payload <- liftIO $ mkTxPayload ctx wb amt
+        (_,payload) <- liftIO $ mkTxPayload ctx wb amt
 
         rTx <- request @(ApiConstructTransaction n) ctx
             (Link.createUnsignedTransaction @'Shelley wa) Default payload
@@ -272,7 +267,7 @@ spec = describe "NEW_SHELLEY_TRANSACTIONS" $ do
         wa <- fixtureWalletWith @n ctx [minUTxOValue + 1]
         wb <- emptyWallet ctx
 
-        payload <- liftIO $ mkTxPayload ctx wb minUTxOValue
+        (_,payload) <- liftIO $ mkTxPayload ctx wb minUTxOValue
 
         rTx <- request @(ApiConstructTransaction n) ctx
             (Link.createUnsignedTransaction @'Shelley wa) Default payload
@@ -286,7 +281,7 @@ spec = describe "NEW_SHELLEY_TRANSACTIONS" $ do
         wa <- fixtureWalletWith @n ctx [srcAmt]
         wb <- emptyWallet ctx
 
-        payload <- liftIO $ mkTxPayload ctx wb reqAmt
+        (_,payload) <- liftIO $ mkTxPayload ctx wb reqAmt
 
         rTx <- request @(ApiConstructTransaction n) ctx
             (Link.createUnsignedTransaction @'Shelley wa) Default payload
@@ -299,7 +294,7 @@ spec = describe "NEW_SHELLEY_TRANSACTIONS" $ do
         wa <- emptyWallet ctx
         wb <- emptyWallet ctx
 
-        payload <- liftIO $ mkTxPayload ctx wb minUTxOValue
+        (_,payload) <- liftIO $ mkTxPayload ctx wb minUTxOValue
 
         rTx <- request @(ApiConstructTransaction n) ctx
             (Link.createUnsignedTransaction @'Shelley wa) Default payload
@@ -756,8 +751,6 @@ spec = describe "NEW_SHELLEY_TRANSACTIONS" $ do
   -- minting
   -- update with sign / submit tx where applicable
   -- end to end join pool and get rewards
-=======
->>>>>>> 4f9efbadb (accommodate sign tx in integrations testing)
   where
     -- Construct a JSON payment request for the given quantity of lovelace.
     mkTxPayload
@@ -776,4 +769,34 @@ spec = describe "NEW_SHELLEY_TRANSACTIONS" $ do
                         "quantity": #{amt},
                         "unit": "lovelace"
                     }
+                  }]
+                }|])
+    -- Like mkTxPayload, except that assets are included in the payment.
+    -- Asset amounts are specified by ((PolicyId Hex, AssetName Hex), amount).
+    mkTxPayloadMA
+        :: forall l m.
+            ( DecodeAddress l
+            , DecodeStakeAddress l
+            , EncodeAddress l
+            , MonadUnliftIO m
+            )
+        => (ApiT Address, Proxy l)
+        -> Natural
+        -> [((Text, Text), Natural)]
+        -> m Payload
+    mkTxPayloadMA destination coin val = do
+        let assetJson ((pid, name), q) = [json|{
+                    "policy_id": #{pid},
+                    "asset_name": #{name},
+                    "quantity": #{q}
+                }|]
+        return $ Json [json|{
+                "payments": [{
+                    "address": #{destination},
+                    "amount": {
+                        "quantity": #{coin},
+                        "unit": "lovelace"
+                    },
+                    "assets": #{map assetJson val}
                 }]
+            }|]
