@@ -8,6 +8,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -291,7 +292,7 @@ constructSignedTx
 constructSignedTx networkId payload (rewardAcnt, pwdAcnt) keyFrom era serializedTx = do
     let TxPayload md certs mkExtraWits = payload
     unsigned <- _decodeTxBody era serializedTx
-    let areWdrls = undefined
+    let areWdrls = (unsigned Cardano.txWithdrawals) /= Cardano.TxWithdrawalsNone
     let selectedInputs = undefined
 
     wits <- case (txWitnessTagFor @k) of

@@ -162,6 +162,7 @@ import Cardano.Wallet
     , ErrWalletNotResponding (..)
     , ErrWithRootKey (..)
     , ErrWithdrawalNotWorth (..)
+    , ErrWitnessTx (..)
     , ErrWrongPassphrase (..)
     , FeeEstimation (..)
     , HasNetworkLayer
@@ -1793,12 +1794,13 @@ signTransaction ctx (ApiT wid) body = do
     let pwd = coerce $ body ^. #passphrase . #getApiT
     -- TODO: decode tx
     let txBody = body ^. #transaction . #getApiBytesT . #payload
+    let txCtx = defaultTransactionCtx
 
     -- (_, mkRwdAcct) <- mkRewardAccountBuilder @_ @s @_ @n ctx wid Nothing
     let stubRwdAcct = first getRawKey
 
     _tx <- withWorkerCtx ctx wid liftE liftE $ \wrk ->
-        liftHandler $ W.signTransaction @_ @s @k wrk wid stubRwdAcct pwd txBody
+        liftHandler $ W.signTransaction @_ @s @k wrk wid stubRwdAcct pwd (SerialisedTx txBody) txCtx
 
     -- fullTx <- liftIO . W.joinSerialisedTxParts @_ @k ctx tx
     pure $ Api.ApiSignedTransaction
@@ -3283,6 +3285,20 @@ instance IsServerError ErrSignPayment where
             }
         ErrSignPaymentWithRootKey e@ErrWithRootKeyWrongPassphrase{} -> toServerError e
         ErrSignPaymentIncorrectTTL e -> toServerError e
+
+instance IsServerError ErrWitnessTx where
+    toServerError = \case
+        ErrWitnessTxSignTx e -> toServerError e
+        ErrWitnessTxNoSuchWallet e -> (toServerError e)
+            { errHTTPCode = 404
+            , errReasonPhrase = errReasonPhrase err404
+            }
+        ErrWitnessTxWithRootKey e@ErrWithRootKeyNoRootKey{} -> (toServerError e)
+            { errHTTPCode = 403
+            , errReasonPhrase = errReasonPhrase err403
+            }
+        ErrWitnessTxWithRootKey e@ErrWithRootKeyWrongPassphrase{} -> toServerError e
+        ErrWitnessTxIncorrectTTL e -> toServerError e
 
 instance IsServerError ErrConstructTx where
     toServerError = \case

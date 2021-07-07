@@ -120,6 +120,7 @@ module Cardano.Wallet
     , constructTransaction
     , ErrSelectAssets(..)
     , ErrSignPayment (..)
+    , ErrWitnessTx (..)
     , ErrNotASequentialWallet (..)
     , ErrWithdrawalNotWorth (..)
     , ErrConstructTx (..)
@@ -388,6 +389,7 @@ import Cardano.Wallet.Transaction
     , ErrDecodeSignedTx (..)
     , ErrMkTx (..)
     , ErrSelectionCriteria (..)
+    , ErrSignTx (..)
     , TransactionCtx (..)
     , TransactionLayer (..)
     , Withdrawal (..)
@@ -1553,23 +1555,25 @@ signTransaction
     -> ((k 'RootK XPrv, Passphrase "encryption") -> (XPrv, Passphrase "encryption"))
        -- ^ Reward account derived from the root key (or somewhere else).
     -> Passphrase "raw"
-    -> ByteString
-    -> ExceptT ErrSignPayment IO SerialisedTxParts
-signTransaction ctx wid mkRwdAcct pwd txBody = db & \DBLayer{..} -> do
+    -> SerialisedTx
+    -> TransactionCtx
+    -> ExceptT ErrWitnessTx IO SerialisedTxParts
+signTransaction ctx wid mkRwdAcct pwd txSerialized txCtx = db & \DBLayer{..} -> do
     era <- liftIO $ currentNodeEra nl
-    let _decoded = decodeSignedTx tl era txBody
-    withRootKey @_ @s ctx wid pwd ErrSignPaymentWithRootKey $ \xprv scheme -> do
+    withRootKey @_ @s ctx wid pwd ErrWitnessTxWithRootKey $ \xprv scheme -> do
         let pwdP = preparePassphrase scheme pwd
         mapExceptT atomically $ do
-            cp <- withExceptT ErrSignPaymentNoSuchWallet $ withNoSuchWallet wid $
+            cp <- withExceptT ErrWitnessTxNoSuchWallet $ withNoSuchWallet wid $
                 readCheckpoint wid
 
             -- TODO: ADP-919 implement this
-            let _keyFrom = isOwned (getState cp) (xprv, pwdP)
-            let _rewardAcnt = mkRwdAcct (xprv, pwdP)
-            -- withExceptT ErrSignPaymentMkTx $ ExceptT $ pure $
-            --     witnessTransaction tl rewardAcnt keyFrom txBody
+            let keyFrom = isOwned (getState cp) (xprv, pwdP)
+            let rewardAcnt = mkRwdAcct (xprv, pwdP)
+            pp <- liftIO $ currentProtocolParameters nl
+            _ <- withExceptT ErrWitnessTxSignTx $ ExceptT $ pure $
+                 mkSignedTransaction tl era rewardAcnt keyFrom pp txCtx txSerialized
             let tx = mempty
+            let (SerialisedTx txBody) = txSerialized
             pure $ SerialisedTxParts tx txBody []
 
   where
@@ -2595,6 +2599,14 @@ data ErrConstructTx
     | ErrConstructTxIncorrectTTL PastHorizonException
     | ErrConstructTxNotImplemented String
       -- ^ Temporary error constructor.
+    deriving (Show, Eq)
+
+-- | Errors that can occur when signing a transaction.
+data ErrWitnessTx
+    = ErrWitnessTxSignTx ErrSignTx
+    | ErrWitnessTxNoSuchWallet ErrNoSuchWallet
+    | ErrWitnessTxWithRootKey ErrWithRootKey
+    | ErrWitnessTxIncorrectTTL PastHorizonException
     deriving (Show, Eq)
 
 -- | Errors that can occur when submitting a signed transaction to the network.
