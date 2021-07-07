@@ -135,6 +135,7 @@ import Cardano.Wallet.Transaction
     , ErrOutputTokenBundleSizeExceedsLimit (..)
     , ErrOutputTokenQuantityExceedsLimit (..)
     , ErrSelectionCriteria (..)
+    , ErrSignTx (..)
     , TransactionCtx (..)
     , TransactionLayer (..)
     , withdrawalToCoin
@@ -271,6 +272,62 @@ constructUnsignedTx networkId (md, certs) ttl rewardAcnt wdrl cs fee era =
   where
     tx = mkUnsignedTx era ttl cs md wdrls certs (toCardanoLovelace fee)
     wdrls = mkWithdrawals networkId rewardAcnt wdrl
+
+constructSignedTx
+    :: forall k era.
+        ( TxWitnessTagFor k
+        , WalletKey k
+        , EraConstraints era
+        )
+    => Cardano.NetworkId
+    -> TxPayload era
+    -> (XPrv, Passphrase "encryption")
+    -- ^ Reward account
+    -> (Address -> Maybe (k 'AddressK XPrv, Passphrase "encryption"))
+    -- ^ Key store
+    -> ShelleyBasedEra era
+    -> SerialisedTx
+    -> Either ErrSignTx (Tx, SealedTx)
+constructSignedTx networkId payload (rewardAcnt, pwdAcnt) keyFrom era serializedTx = do
+    let TxPayload md certs mkExtraWits = payload
+    unsigned <- _decodeTxBody era serializedTx
+    let areWdrls = undefined
+    let selectedInputs = undefined
+
+    wits <- case (txWitnessTagFor @k) of
+        TxWitnessShelleyUTxO -> do
+            addrWits <- forM selectedInputs $ \(_, TxOut addr _) -> do
+                (k, pwd) <- lookupXPrv addr
+                pure $ mkShelleyWitness unsigned (getRawKey k, pwd)
+
+            let wdrlsWits =
+                    if areWdrls then
+                        [mkShelleyWitness unsigned (rewardAcnt, pwdAcnt)]
+                    else []
+
+            pure $ mkExtraWits unsigned <> F.toList addrWits <> wdrlsWits
+
+        TxWitnessByronUTxO{} -> do
+            bootstrapWits <- forM selectedInputs $ \(_, TxOut addr _) -> do
+                (k, pwd) <- lookupXPrv addr
+                pure $ mkByronWitness unsigned networkId addr (getRawKey k, pwd)
+            pure $ F.toList bootstrapWits <> mkExtraWits unsigned
+
+    let signed = Cardano.makeSignedTransaction wits unsigned
+    let withResolvedInputs tx = tx
+            { resolvedInputs = second txOutCoin <$> F.toList selectedInputs
+            }
+    Right $ first withResolvedInputs $ case era of
+        ShelleyBasedEraShelley -> sealShelleyTx fromShelleyTx signed
+        ShelleyBasedEraAllegra -> sealShelleyTx fromAllegraTx signed
+        ShelleyBasedEraMary    -> sealShelleyTx fromMaryTx signed
+
+  where
+      lookupXPrv
+          :: Address
+          -> Either ErrSignTx (k 'AddressK XPrv, Passphrase "encryption")
+      lookupXPrv addr =
+          maybe (Left $ ErrSignTxKeyNotFoundForAddress addr) Right (keyFrom addr)
 
 mkTx
     :: forall k era.
@@ -600,6 +657,31 @@ _decodeSignedTx era bytes = do
 
         _ ->
             Left ErrDecodeSignedTxNotSupported
+
+_decodeTxBody
+    :: forall era.  Cardano.IsCardanoEra era
+    => ShelleyBasedEra era
+    -> SerialisedTx
+    -> Either ErrSignTx (Cardano.TxBody era)
+_decodeTxBody era (SerialisedTx bytes) = do
+    case era of
+        ShelleyBasedEraShelley ->
+            case Cardano.deserialiseFromCBOR (Cardano.AsTxBody Cardano.AsShelleyEra) bytes of
+                Right txValid -> pure txValid
+                Left decodeErr ->
+                    Left $ ErrSignTxInvalidSerializedTx (T.pack $ show decodeErr)
+        ShelleyBasedEraAllegra ->
+            case Cardano.deserialiseFromCBOR (Cardano.AsTxBody Cardano.AsAllegraEra) bytes of
+                Right txValid -> pure txValid
+                Left decodeErr ->
+                    Left $ ErrSignTxInvalidSerializedTx (T.pack $ show decodeErr)
+        ShelleyBasedEraMary    ->
+            case Cardano.deserialiseFromCBOR (Cardano.AsTxBody Cardano.AsMaryEra) bytes of
+                Right txValid -> pure txValid
+                Left decodeErr ->
+                    Left $ ErrSignTxInvalidSerializedTx (T.pack $ show decodeErr)
+        _ ->
+            Left $ ErrSignTxInvalidEra
 
 txConstraints :: ProtocolParameters -> TxWitnessTag -> TxConstraints
 txConstraints protocolParams witnessTag = TxConstraints

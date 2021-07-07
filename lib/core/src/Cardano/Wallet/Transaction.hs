@@ -273,7 +273,7 @@ data ErrSignTx
     -- ^ We tried to sign a transaction with inputs that are unknown to us?
     | ErrSignTxInvalidSerializedTx Text
     -- ^ We failed to deserialize an unsigned transaction.
-    | ErrSignTxInvalidEra AnyCardanoEra
+    | ErrSignTxInvalidEra
     -- ^ Should never happen, means that that we have programmatically provided
     -- an invalid era.
     deriving (Eq, Show)
