@@ -64,6 +64,7 @@ import Cardano.Wallet.Primitive.Types.Tx
     , TokenBundleSizeAssessor
     , Tx (..)
     , TxConstraints
+    , TxIn
     , TxMetadata
     , TxOut
     )
@@ -127,12 +128,8 @@ data TransactionLayer k = TransactionLayer
             -- Era for which the transaction should be created.
         -> (XPrv, Passphrase "encryption")
             -- Reward account
-        -> (Address -> Maybe (k 'AddressK XPrv, Passphrase "encryption"))
+        -> (TxIn -> Maybe (Address, k 'AddressK XPrv, Passphrase "encryption"))
             -- Key store
-        -> ProtocolParameters
-            -- Current protocol parameters
-        -> TransactionCtx
-            -- An additional context about the transaction
         -> SerialisedTx
             -- serialized unsigned transaction
         -> Either ErrSignTx (Tx, SealedTx)
@@ -269,7 +266,7 @@ data ErrMkTx
 
 -- | Possible signing error
 data ErrSignTx
-    = ErrSignTxKeyNotFoundForAddress Address
+    = ErrSignTxKeyNotFoundForAddress TxIn
     -- ^ We tried to sign a transaction with inputs that are unknown to us?
     | ErrSignTxInvalidSerializedTx Text
     -- ^ We failed to deserialize an unsigned transaction.

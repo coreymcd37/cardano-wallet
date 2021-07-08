@@ -1784,7 +1784,7 @@ listAddresses ctx normalize (ApiT wid) stateFilter = do
 signTransaction
     :: forall ctx s k.
         ( ctx ~ ApiLayer s k
-        , IsOwned s k
+    --    , IsOwned s k
         , WalletKey k
         )
     => ctx
@@ -1795,13 +1795,12 @@ signTransaction ctx (ApiT wid) body = do
     let pwd = coerce $ body ^. #passphrase . #getApiT
     -- TODO: decode tx
     let txBody = body ^. #transaction . #getApiBytesT . #payload
-    let txCtx = defaultTransactionCtx
 
     -- (_, mkRwdAcct) <- mkRewardAccountBuilder @_ @s @_ @n ctx wid Nothing
     let stubRwdAcct = first getRawKey
 
     _tx <- withWorkerCtx ctx wid liftE liftE $ \wrk ->
-        liftHandler $ W.signTransaction @_ @s @k wrk wid stubRwdAcct pwd (SerialisedTx txBody) txCtx
+        liftHandler $ W.signTransaction @_ @s @k wrk wid stubRwdAcct pwd (SerialisedTx txBody)
 
     -- fullTx <- liftIO . W.joinSerialisedTxParts @_ @k ctx tx
     pure $ Api.ApiSignedTransaction
