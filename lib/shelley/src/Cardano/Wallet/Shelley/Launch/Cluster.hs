@@ -923,6 +923,7 @@ genConfig dir systemStart clusterEra logCfg = do
     Yaml.decodeFileThrow (source </> "node.config")
         >>= withAddedKey "ShelleyGenesisFile" shelleyGenesisFile
         >>= withAddedKey "ByronGenesisFile" byronGenesisFile
+        >>= withAddedKey "AlonzoGenesisFile" alonzoGenesisFile
         >>= withHardForks clusterEra
         >>= withAddedKey "minSeverity" Debug
         >>= withScribes scribes
@@ -942,6 +943,8 @@ genConfig dir systemStart clusterEra logCfg = do
         >>= withObject (pure . updateSystemStart systemStart')
         >>= Aeson.encodeFile shelleyGenesisFile
 
+    Yaml.decodeFileThrow @_ @Aeson.Value (source </> "alonzo-genesis.yaml")
+        >>= Aeson.encodeFile alonzoGenesisFile
 
     ----
     -- Initial Funds.
@@ -976,6 +979,9 @@ genConfig dir systemStart clusterEra logCfg = do
   where
     shelleyGenesisFile :: FilePath
     shelleyGenesisFile = dir </> "shelley-genesis.json"
+
+    alonzoGenesisFile :: FilePath
+    alonzoGenesisFile = dir </> "alonzo-genesis.json"
 
     byronGenesisFile :: FilePath
     byronGenesisFile = dir </> "byron-genesis.json"
