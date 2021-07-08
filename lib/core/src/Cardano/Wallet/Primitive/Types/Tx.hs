@@ -66,7 +66,11 @@ module Cardano.Wallet.Primitive.Types.Tx
 import Prelude
 
 import Cardano.Api
-    ( TxMetadata (..), TxMetadataValue (..) )
+    ( AnyCardanoEra (..)
+    , InAnyCardanoEra (..)
+    , TxMetadata (..)
+    , TxMetadataValue (..)
+    )
 import Cardano.Slotting.Slot
     ( SlotNo (..) )
 import Cardano.Wallet.Orphans
@@ -139,6 +143,7 @@ import Numeric.Natural
 import Quiet
     ( Quiet (..) )
 
+import qualified Cardano.Api as Cardano
 import qualified Cardano.Wallet.Primitive.Types.TokenBundle as TokenBundle
 import qualified Cardano.Wallet.Primitive.Types.TokenMap as TokenMap
 import qualified Data.Map.Strict as Map
@@ -402,9 +407,16 @@ instance Buildable a => Buildable (WithDirection a) where
 
 -- | @SealedTx@ is a signed and serialised transaction that is ready to be
 -- submitted to the node.
-newtype SealedTx = SealedTx { getSealedTx :: ByteString }
-    deriving stock (Show, Eq, Generic)
-    deriving newtype (ByteArrayAccess, NFData)
+-- TODO: ADP-909 this wrapper will disappear, leaving just Cardano.Tx
+newtype SealedTx = SealedTx { getSealedTx :: InAnyCardanoEra Cardano.Tx }
+    deriving stock (Generic)
+
+instance Show SealedTx where
+    show (SealedTx (InAnyCardanoEra _era tx)) = show tx
+
+-- fixme: temp fix
+instance NFData SealedTx where
+    rnf = rnf . show
 
 -- | A serialised transaction that may be only partially signed, or even
 -- invalid.

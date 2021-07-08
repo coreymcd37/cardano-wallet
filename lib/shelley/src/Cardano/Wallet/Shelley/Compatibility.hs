@@ -52,7 +52,6 @@ module Cardano.Wallet.Shelley.Compatibility
       -- * Conversions
     , toCardanoHash
     , toEpochSize
-    , unsealShelleyTx
     , toPoint
     , toCardanoTxId
     , toCardanoTxIn
@@ -60,7 +59,6 @@ module Cardano.Wallet.Shelley.Compatibility
     , toAllegraTxOut
     , toMaryTxOut
     , toCardanoLovelace
-    , sealShelleyTx
     , toStakeKeyRegCert
     , toStakeKeyDeregCert
     , toStakePoolDlgCert
@@ -1079,41 +1077,6 @@ toByronNetworkMagic pm@(W.ProtocolMagic magic) =
         Byron.NetworkMainOrStage
     else
         Byron.NetworkTestnet (fromIntegral magic)
-
--- | SealedTx are the result of rightfully constructed shelley transactions so, it
--- is relatively safe to unserialize them from CBOR.
-unsealShelleyTx
-    :: (HasCallStack, O.ShelleyBasedEra (era c))
-    => (GenTx (ShelleyBlock (era c)) -> CardanoGenTx c)
-    -> W.SealedTx
-    -> CardanoGenTx c
-unsealShelleyTx wrap = wrap
-    . unsafeDeserialiseCbor fromCBOR
-    . BL.fromStrict
-    . W.getSealedTx
-
-sealShelleyTx
-    :: forall era b c. (O.ShelleyBasedEra (Cardano.ShelleyLedgerEra era))
-    => (SLAPI.Tx (Cardano.ShelleyLedgerEra era) -> (W.Tx, b, c))
-    -> Cardano.Tx era
-    -> (W.Tx, W.SealedTx)
-sealShelleyTx fromTx (Cardano.ShelleyTx _era tx) =
-    let
-        -- The Cardano.Tx GADT won't allow the Shelley crypto type param escape,
-        -- so we convert directly to the concrete wallet Tx type:
-        (walletTx, _, _) = fromTx tx
-        sealed = serialize' $ O.mkShelleyTx tx
-    in
-        (walletTx, W.SealedTx sealed)
-
--- Needed to compile, but in principle should never be called.
-sealShelleyTx _ (Cardano.ByronTx txaux) =
-    let
-        tx = fromTxAux txaux
-        inps = fst <$> W.resolvedInputs tx
-        outs = W.outputs tx
-    in
-        (tx, W.SealedTx $ CBOR.toStrictByteString $ CBOR.encodeTx (inps, outs))
 
 toCardanoTxId :: W.Hash "Tx" -> Cardano.TxId
 toCardanoTxId (W.Hash h) = Cardano.TxId $ UnsafeHash $ toShort h

@@ -31,7 +31,6 @@ module Cardano.Wallet.Byron.Compatibility
 
       -- * Conversions
     , toByronHash
-    , toGenTx
     , toPoint
 
     , fromBlockNo
@@ -269,17 +268,6 @@ toPoint
 toPoint genesisH (W.BlockHeader sl _ h _)
   | h == (coerce genesisH) = O.GenesisPoint
   | otherwise = O.Point $ Point.block sl (toByronHash h)
-
--- | SealedTx are the result of rightfully constructed byron transactions so, it
--- is relatively safe to unserialize them from CBOR.
-toGenTx :: HasCallStack => W.SealedTx -> GenTx ByronBlock
-toGenTx =
-    fromMempoolPayload
-    . MempoolTx
-    . annotateTxAux
-    . unsafeDeserialiseCbor fromCBOR
-    . BL.fromStrict
-    . W.getSealedTx
 
 byronCodecConfig :: W.SlottingParameters -> CodecConfig ByronBlock
 byronCodecConfig W.SlottingParameters{getEpochLength} =

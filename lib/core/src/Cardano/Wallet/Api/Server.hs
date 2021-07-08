@@ -431,6 +431,7 @@ import Cardano.Wallet.Transaction
     , ErrOutputTokenBundleSizeExceedsLimit (..)
     , ErrOutputTokenQuantityExceedsLimit (..)
     , ErrSelectionCriteria (..)
+    , ErrSignTx (..)
     , TransactionCtx (..)
     , TransactionLayer
     , Withdrawal (..)
@@ -3299,6 +3300,15 @@ instance IsServerError ErrWitnessTx where
             }
         ErrWitnessTxWithRootKey e@ErrWithRootKeyWrongPassphrase{} -> toServerError e
         ErrWitnessTxIncorrectTTL e -> toServerError e
+
+instance IsServerError ErrSignTx where
+    toServerError = \case
+        ErrSignTxKeyNotFoundForAddress addr ->
+            apiError err500 CreatedInvalidTransaction $ "fixme: We tried to sign a transaction with inputs that are unknown to us?"
+        ErrSignTxInvalidSerializedTx err ->
+            apiError err500 CreatedInvalidTransaction $ "fixme: We failed to deserialize an unsigned transaction: " <> err
+        ErrSignTxInvalidEra ->
+            apiError err500 CreatedInvalidTransaction $ "fixme: Should never happen, means that that we have programmatically provided an invalid era"
 
 instance IsServerError ErrConstructTx where
     toServerError = \case

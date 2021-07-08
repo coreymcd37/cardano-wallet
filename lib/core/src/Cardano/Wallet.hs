@@ -488,6 +488,7 @@ import UnliftIO.Exception
 import UnliftIO.MVar
     ( modifyMVar_, newMVar )
 
+import qualified Cardano.Api as Cardano
 import qualified Cardano.Crypto.Wallet as CC
 import qualified Cardano.Wallet.Primitive.AddressDiscovery.Random as Rnd
 import qualified Cardano.Wallet.Primitive.AddressDiscovery.Sequential as Seq
