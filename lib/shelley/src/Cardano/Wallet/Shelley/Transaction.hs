@@ -179,6 +179,7 @@ import qualified Cardano.Crypto.DSIGN as DSIGN
 import qualified Cardano.Crypto.Hash.Class as Crypto
 import qualified Cardano.Crypto.Wallet as Crypto.HD
 import qualified Cardano.Ledger.Core as SL
+import qualified Cardano.Ledger.Shelley.Constraints as Ledger
 import qualified Cardano.Wallet.Primitive.Types.Coin as Coin
 import qualified Cardano.Wallet.Primitive.Types.TokenBundle as TokenBundle
 import qualified Cardano.Wallet.Primitive.Types.TokenMap as TokenMap
@@ -193,6 +194,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Shelley.Spec.Ledger.Address.Bootstrap as SL
+import qualified Shelley.Spec.Ledger.TxBody as Ledger
 
 -- | Type encapsulating what we need to know to add things -- payloads,
 -- certificates -- to a transaction.
@@ -279,6 +281,11 @@ constructSignedTx
         ( TxWitnessTagFor k
         , WalletKey k
         , EraConstraints era
+        , SL.TxBody (Cardano.ShelleyLedgerEra era) ~ Ledger.TxBody era
+        , Era era
+        , Cardano.FromCBOR (Ledger.PParamsDelta era)
+        , ToCBOR (SL.TxOut era)
+        , ToCBOR (Ledger.PParamsDelta era)
         )
     => Cardano.NetworkId
     -> TxPayload era
@@ -292,8 +299,10 @@ constructSignedTx
 constructSignedTx networkId payload (rewardAcnt, pwdAcnt) keyFrom era serializedTx = do
     let TxPayload md certs mkExtraWits = payload
     unsigned <- _decodeTxBody era serializedTx
-    let areWdrls = (unsigned Cardano.txWithdrawals) /= Cardano.TxWithdrawalsNone
-    let selectedInputs = undefined
+    let (Cardano.ShelleyTxBody _ txbodyledger  _ _) = unsigned
+    let (Ledger.TxBody _ins _ _ wdrls _ _ _ _) = txbodyledger
+    let wdrlsPresent = wdrls /= Ledger.Wdrl Map.empty
+    let selectedInputs = []
 
     wits <- case (txWitnessTagFor @k) of
         TxWitnessShelleyUTxO -> do
@@ -302,7 +311,7 @@ constructSignedTx networkId payload (rewardAcnt, pwdAcnt) keyFrom era serialized
                 pure $ mkShelleyWitness unsigned (getRawKey k, pwd)
 
             let wdrlsWits =
-                    if areWdrls then
+                    if wdrlsPresent then
                         [mkShelleyWitness unsigned (rewardAcnt, pwdAcnt)]
                     else []
 

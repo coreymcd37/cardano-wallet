@@ -158,6 +158,7 @@ module Cardano.Wallet
     , defaultLocalTxSubmissionConfig
     , runLocalTxSubmissionPool
     , ErrMkTx (..)
+    , ErrSignTx (..)
     , ErrSubmitTx (..)
     , ErrSubmitExternalTx (..)
     , ErrRemoveTx (..)
