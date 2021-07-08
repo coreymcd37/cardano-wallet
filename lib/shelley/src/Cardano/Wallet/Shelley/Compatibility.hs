@@ -47,7 +47,6 @@ module Cardano.Wallet.Shelley.Compatibility
 
       -- * Genesis
     , emptyGenesis
-    , genesisTip
 
       -- * Conversions
     , toCardanoHash
@@ -111,6 +110,7 @@ module Cardano.Wallet.Shelley.Compatibility
     , slottingParametersFromGenesis
     , fromMaryBlock
     , fromMaryTx
+    , fromAlonzoTx
 
       -- * Internal Conversions
     , decentralizationLevelFromPParams
@@ -144,8 +144,14 @@ import Cardano.Binary
     ( fromCBOR, serialize' )
 import Cardano.Crypto.Hash.Class
     ( Hash (UnsafeHash), hashToBytes )
+import Cardano.Ledger.Alonzo
+    ( AlonzoEra )
+import Cardano.Ledger.BaseTypes
+    ( interval0, strictMaybeToMaybe, urlToText )
 import Cardano.Ledger.Era
     ( Era (..) )
+import Cardano.Ledger.Serialization
+    ( ToCBORGroup )
 import Cardano.Slotting.Slot
     ( EpochNo (..), EpochSize (..) )
 import Cardano.Wallet.Api.Types
@@ -233,22 +239,14 @@ import Ouroboros.Consensus.HardFork.Combinator.AcrossEras
     ( OneEraHash (..) )
 import Ouroboros.Consensus.HardFork.History.Summary
     ( Bound (..) )
+import Ouroboros.Consensus.Shelley.Eras
+    ( StandardCrypto )
 import Ouroboros.Consensus.Shelley.Ledger
     ( ShelleyHash (..) )
 import Ouroboros.Consensus.Shelley.Ledger.Block
     ( ShelleyBlock (..) )
-import Ouroboros.Consensus.Shelley.Protocol.Crypto
-    ( StandardCrypto )
 import Ouroboros.Network.Block
-    ( BlockNo (..)
-    , ChainHash
-    , Point (..)
-    , Tip (..)
-    , genesisPoint
-    , getLegacyTipBlockNo
-    , getTipPoint
-    , legacyTip
-    )
+    ( BlockNo (..), ChainHash, Point (..), Tip (..), getTipPoint )
 import Ouroboros.Network.CodecCBORTerm
     ( CodecCBORTerm )
 import Ouroboros.Network.Magic
@@ -262,10 +260,6 @@ import Ouroboros.Network.NodeToClient
     )
 import Ouroboros.Network.Point
     ( WithOrigin (..) )
-import Shelley.Spec.Ledger.BaseTypes
-    ( interval0, strictMaybeToMaybe, urlToText )
-import Shelley.Spec.Ledger.Serialization
-    ( ToCBORGroup )
 import Type.Reflection
     ( Typeable, typeRep )
 
@@ -278,7 +272,10 @@ import qualified Cardano.Binary as Binary
 import qualified Cardano.Byron.Codec.Cbor as CBOR
 import qualified Cardano.Chain.Common as Byron
 import qualified Cardano.Crypto.Hash as Crypto
+import qualified Cardano.Ledger.Address as SL
+import qualified Cardano.Ledger.BaseTypes as SL
 import qualified Cardano.Ledger.Core as SL.Core
+import qualified Cardano.Ledger.Credential as SL
 import qualified Cardano.Ledger.Crypto as SL
 import qualified Cardano.Ledger.Era as Ledger.Era
 import qualified Cardano.Ledger.SafeHash as SafeHash
@@ -310,12 +307,9 @@ import qualified Data.Text.Encoding as T
 import qualified Ouroboros.Consensus.Shelley.Ledger as O
 import qualified Ouroboros.Network.Block as O
 import qualified Ouroboros.Network.Point as Point
-import qualified Shelley.Spec.Ledger.Address as SL
 import qualified Shelley.Spec.Ledger.API as SL
 import qualified Shelley.Spec.Ledger.API as SLAPI
-import qualified Shelley.Spec.Ledger.BaseTypes as SL
 import qualified Shelley.Spec.Ledger.BlockChain as SL
-import qualified Shelley.Spec.Ledger.Credential as SL
 import qualified Shelley.Spec.Ledger.UTxO as SL
 
 type NodeVersionData =
@@ -348,22 +342,6 @@ emptyGenesis gp = W.Block
             hashOfNoParent
         }
     }
-
---------------------------------------------------------------------------------
---
--- Genesis
-
-
-genesisTip :: Tip (CardanoBlock sc)
-genesisTip = legacyTip genesisPoint genesisBlockNo
-  where
-    -- NOTE: ourobouros-network states that:
-    --
-    -- There /is/ no block number if we are at genesis
-    -- ('genesisBlockNo' is the block number of the first block on the chain).
-    -- Usage of this function should be phased out.
-    genesisBlockNo = BlockNo 0
-
 
 --------------------------------------------------------------------------------
 --
@@ -435,6 +413,8 @@ toCardanoBlockHeader gp = \case
         toShelleyBlockHeader (W.getGenesisBlockHash gp) blk
     BlockMary blk ->
         toShelleyBlockHeader (W.getGenesisBlockHash gp) blk
+    BlockAlonzo blk ->
+        toShelleyBlockHeader (W.getGenesisBlockHash gp) blk
 
 toShelleyBlockHeader
     :: (Era e, ToCBORGroup (Ledger.Era.TxSeq e))
@@ -476,6 +456,8 @@ fromCardanoBlock gp = \case
         fst $ fromAllegraBlock gp blk
     BlockMary blk ->
         fst $ fromMaryBlock gp blk
+    BlockAlonzo blk ->
+        fst $ fromAlonzoBlock gp blk
 
 toCardanoEra :: CardanoBlock c -> AnyCardanoEra
 toCardanoEra = \case
@@ -483,6 +465,7 @@ toCardanoEra = \case
     BlockShelley{} -> AnyCardanoEra ShelleyEra
     BlockAllegra{} -> AnyCardanoEra AllegraEra
     BlockMary{}    -> AnyCardanoEra MaryEra
+    BlockAlonzo{}  -> AnyCardanoEra AlonzoEra
 
 fromShelleyBlock
     :: W.GenesisParameters
@@ -532,6 +515,12 @@ fromMaryBlock gp blk@(ShelleyBlock (SL.Block _ (SL.TxSeq txs')) _) =
             }
         , mconcat poolCerts
         )
+
+fromAlonzoBlock
+    :: W.GenesisParameters
+    -> ShelleyBlock (AlonzoEra StandardCrypto)
+    -> (W.Block, [W.PoolCertificate])
+fromAlonzoBlock = error "todo(ADP-952): fromAlonzoBlock"
 
 fromShelleyHash :: ShelleyHash c -> W.Hash "BlockHeader"
 fromShelleyHash (ShelleyHash (SL.HashHeader h)) = W.Hash (hashToBytes h)
@@ -596,6 +585,13 @@ fromTip genesisHash tip = case getPoint (getTipPoint tip) of
         -- possibility.
         , parentHeaderHash = W.Hash "parentHeaderHash - unused in Shelley"
         }
+  where
+    -- TODO: This function was marked deprecated in ouroboros-network.
+    -- It is wrong, because `Origin` doesn't have a block number.
+    -- We should remove it.
+    getLegacyTipBlockNo t = case O.getTipBlockNo t of
+        Origin -> BlockNo 0
+        At x -> x
 
 -- NOTE: Unsafe conversion from Natural -> Word16
 fromMaxTxSize :: Natural -> Quantity "byte" Word16
@@ -920,6 +916,14 @@ fromMaryTx tx =
         W.TxOut (fromShelleyAddress addr) $
         fromCardanoValue $ Cardano.fromMaryValue value
 
+fromAlonzoTx
+    :: SLAPI.Tx (Cardano.ShelleyLedgerEra Cardano.AlonzoEra)
+    -> ( W.Tx
+       , [W.DelegationCertificate]
+       , [W.PoolCertificate]
+       )
+fromAlonzoTx = error "todo(ADP-952): fromAlonzoTx"
+
 fromCardanoValue :: Cardano.Value -> TokenBundle.TokenBundle
 fromCardanoValue = uncurry TokenBundle.fromFlatList . extract
   where
@@ -1138,11 +1142,12 @@ toCardanoLovelace (W.Coin c) = Cardano.Lovelace $ safeCast c
 
 toShelleyTxOut :: W.TxOut -> Cardano.TxOut ShelleyEra
 toShelleyTxOut (W.TxOut (W.Address addr) tokens) =
-    Cardano.TxOut addrInEra
-        $ adaOnly
-        $ toCardanoLovelace
-        $ TokenBundle.getCoin tokens
+    Cardano.TxOut
+        addrInEra
+        (adaOnly $ toCardanoLovelace $ TokenBundle.getCoin tokens)
+        datumHash
   where
+    datumHash = error "todo: datumhash"
     adaOnly = Cardano.TxOutAdaOnly Cardano.AdaOnlyInShelleyEra
     addrInEra = fromMaybe (error "toCardanoTxOut: malformed address") $
         asum
@@ -1156,11 +1161,12 @@ toShelleyTxOut (W.TxOut (W.Address addr) tokens) =
 
 toAllegraTxOut :: W.TxOut -> Cardano.TxOut AllegraEra
 toAllegraTxOut (W.TxOut (W.Address addr) tokens) =
-    Cardano.TxOut addrInEra
-        $ adaOnly
-        $ toCardanoLovelace
-        $ TokenBundle.getCoin tokens
+    Cardano.TxOut
+        addrInEra
+        (adaOnly $ toCardanoLovelace $ TokenBundle.getCoin tokens)
+        datumHash
   where
+    datumHash = error "todo: datumhash"
     adaOnly = Cardano.TxOutAdaOnly Cardano.AdaOnlyInAllegraEra
     addrInEra = fromMaybe (error "toCardanoTxOut: malformed address") $
         asum
@@ -1174,10 +1180,12 @@ toAllegraTxOut (W.TxOut (W.Address addr) tokens) =
 
 toMaryTxOut :: W.TxOut -> Cardano.TxOut MaryEra
 toMaryTxOut (W.TxOut (W.Address addr) tokens) =
-    Cardano.TxOut addrInEra
-        $ Cardano.TxOutValue Cardano.MultiAssetInMaryEra
-        $ toCardanoValue tokens
+    Cardano.TxOut
+        addrInEra
+        (Cardano.TxOutValue Cardano.MultiAssetInMaryEra $ toCardanoValue tokens)
+        datumHash
   where
+    datumHash = error "todo: datumhash"
     addrInEra = fromMaybe (error "toCardanoTxOut: malformed address") $
         asum
         [ Cardano.AddressInEra (Cardano.ShelleyAddressInEra Cardano.ShelleyBasedEraMary)

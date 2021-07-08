@@ -10,7 +10,7 @@
   {
     flags = { systemd = true; };
     package = {
-      specVersion = "2.4";
+      specVersion = "3.0";
       identifier = { name = "cardano-config"; version = "0.1.0.0"; };
       license = "Apache-2.0";
       copyright = "";
@@ -39,8 +39,8 @@
     } // {
     src = (pkgs.lib).mkDefault (pkgs.fetchgit {
       url = "https://github.com/input-output-hk/cardano-node";
-      rev = "8fe46140a52810b6ca456be01d652ca08fe730bf";
-      sha256 = "1c9zc899wlgicrs49i33l0bwb554acsavzh1vcyhnxmpm0dmy8vj";
+      rev = "2e25bee3ac2905cb768f77ff05b08b208996af6b";
+      sha256 = "1p82gd61yga96id1zha9yvkyzkmp5m02n4z3gavrb9ps3idpbfkv";
       });
     postUnpack = "sourceRoot+=/cardano-config; echo source root reset to \$sourceRoot";
     }

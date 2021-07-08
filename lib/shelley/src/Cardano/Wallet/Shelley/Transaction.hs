@@ -111,6 +111,7 @@ import Cardano.Wallet.Primitive.Types.Tx
     )
 import Cardano.Wallet.Shelley.Compatibility
     ( fromAllegraTx
+    , fromAlonzoTx
     , fromMaryTx
     , fromShelleyTx
     , maxTokenBundleSerializedLengthBytes
@@ -330,6 +331,7 @@ mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees era = do
         ShelleyBasedEraShelley -> sealShelleyTx fromShelleyTx signed
         ShelleyBasedEraAllegra -> sealShelleyTx fromAllegraTx signed
         ShelleyBasedEraMary    -> sealShelleyTx fromMaryTx signed
+        ShelleyBasedEraAlonzo  -> sealShelleyTx fromAlonzoTx signed
 
 newTransactionLayer
     :: forall k.
@@ -1114,6 +1116,7 @@ withShelleyBasedEra era fn = case era of
     AnyCardanoEra ShelleyEra  -> fn ShelleyBasedEraShelley
     AnyCardanoEra AllegraEra  -> fn ShelleyBasedEraAllegra
     AnyCardanoEra MaryEra     -> fn ShelleyBasedEraMary
+    AnyCardanoEra AlonzoEra   -> fn ShelleyBasedEraAlonzo
 
 -- FIXME: Make this a Allegra or Shelley transaction depending on the era we're
 -- in. However, quoting Duncan:
@@ -1151,6 +1154,19 @@ mkUnsignedTx era ttl cs md wdrls certs fees =
         in
             Cardano.TxWithdrawals wdrlsSupported
                 (map (\(key, coin) -> (key, coin, wit)) wdrls)
+
+    , txInsCollateral =
+        -- TODO(ADP-957): Support collateral.
+        Cardano.TxInsCollateralNone
+
+    , txProtocolParams =
+        -- TODO: We presumably need to provide the protocol params if our tx
+        -- uses scripts?
+        Cardano.BuildTxWith Nothing
+
+    , txExtraScriptData = Cardano.BuildTxWith Cardano.TxExtraScriptDataNone
+
+    , txExtraKeyWits = Cardano.TxExtraKeyWitnessesNone
 
     , Cardano.txCertificates =
         let
@@ -1191,36 +1207,42 @@ mkUnsignedTx era ttl cs md wdrls certs fees =
         ShelleyBasedEraShelley -> toShelleyTxOut
         ShelleyBasedEraAllegra -> toAllegraTxOut
         ShelleyBasedEraMary -> toMaryTxOut
+        ShelleyBasedEraAlonzo -> error "todo: toAlonzoTxOut"
 
     metadataSupported :: Cardano.TxMetadataSupportedInEra era
     metadataSupported = case era of
         ShelleyBasedEraShelley -> Cardano.TxMetadataInShelleyEra
         ShelleyBasedEraAllegra -> Cardano.TxMetadataInAllegraEra
         ShelleyBasedEraMary -> Cardano.TxMetadataInMaryEra
+        ShelleyBasedEraAlonzo -> Cardano.TxMetadataInAlonzoEra
 
     certSupported :: Cardano.CertificatesSupportedInEra era
     certSupported = case era of
         ShelleyBasedEraShelley -> Cardano.CertificatesInShelleyEra
         ShelleyBasedEraAllegra -> Cardano.CertificatesInAllegraEra
         ShelleyBasedEraMary    -> Cardano.CertificatesInMaryEra
+        ShelleyBasedEraAlonzo -> Cardano.CertificatesInAlonzoEra
 
     explicitFees :: Cardano.Lovelace -> Cardano.TxFee era
     explicitFees = case era of
         ShelleyBasedEraShelley -> Cardano.TxFeeExplicit Cardano.TxFeesExplicitInShelleyEra
         ShelleyBasedEraAllegra -> Cardano.TxFeeExplicit Cardano.TxFeesExplicitInAllegraEra
         ShelleyBasedEraMary    -> Cardano.TxFeeExplicit Cardano.TxFeesExplicitInMaryEra
+        ShelleyBasedEraAlonzo -> Cardano.TxFeeExplicit Cardano.TxFeesExplicitInAlonzoEra
 
     wdrlsSupported :: Cardano.WithdrawalsSupportedInEra era
     wdrlsSupported = case era of
         ShelleyBasedEraShelley -> Cardano.WithdrawalsInShelleyEra
         ShelleyBasedEraAllegra -> Cardano.WithdrawalsInAllegraEra
         ShelleyBasedEraMary    -> Cardano.WithdrawalsInMaryEra
+        ShelleyBasedEraAlonzo -> Cardano.WithdrawalsInAlonzoEra
 
     txValidityUpperBoundSupported :: Cardano.ValidityUpperBoundSupportedInEra era
     txValidityUpperBoundSupported = case era of
         ShelleyBasedEraShelley -> Cardano.ValidityUpperBoundInShelleyEra
         ShelleyBasedEraAllegra -> Cardano.ValidityUpperBoundInAllegraEra
         ShelleyBasedEraMary -> Cardano.ValidityUpperBoundInMaryEra
+        ShelleyBasedEraAlonzo -> Cardano.ValidityUpperBoundInAlonzoEra
 
 mkWithdrawals
     :: NetworkId
@@ -1253,7 +1275,7 @@ mkByronWitness
     -> Address
     -> (XPrv, Passphrase "encryption")
     -> Cardano.KeyWitness era
-mkByronWitness (Cardano.ShelleyTxBody era body _scripts _auxData) nw addr encryptedKey =
+mkByronWitness (Cardano.ShelleyTxBody era body _scripts _scriptData _auxData) nw addr encryptedKey =
     Cardano.ShelleyBootstrapWitness era $
         SL.makeBootstrapWitness txHash (unencrypt encryptedKey) addrAttr
   where
