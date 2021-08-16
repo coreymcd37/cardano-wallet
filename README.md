@@ -20,7 +20,7 @@
 
 ## Overview
 
-Cardano Wallet helps you manage your Ada. You can use it to send and
+Cardano Wallet assists everyone manage their future proof Ada. You can use it to send and
 receive payments on the [Cardano](https://www.cardano.org) blockchain.
 
 This project provides an HTTP Application Programming Interface (API)
